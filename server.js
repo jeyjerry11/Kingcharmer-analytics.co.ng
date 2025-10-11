@@ -1,3 +1,4 @@
+// ===== analytics-server.js =====
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -21,12 +22,16 @@ const StreamSchema = new mongoose.Schema({
   videoId: String,
   seconds: Number,
   provider: String,
+  dataUsedMB: Number,
+  earnedNGN: Number,
   timestamp: { type: Date, default: Date.now }
 });
 
 const DownloadSchema = new mongoose.Schema({
   videoId: String,
   size: Number,
+  ngn: Number,
+  provider: String,
   timestamp: { type: Date, default: Date.now }
 });
 
@@ -46,6 +51,9 @@ const ViewSchema = new mongoose.Schema({
   videoId: String,
   userId: String,
   provider: String,
+  event: String,
+  dataUsedMB: Number,
+  earnedNGN: Number,
   timestamp: { type: Date, default: Date.now }
 });
 
@@ -63,42 +71,111 @@ const verificationCodes = {};
 
 // 1️⃣ Default route
 app.get('/', (req, res) => {
-  res.send('📊 King Charmer Streaming Backend is live & connected!');
+  res.send('📊 King Charmer Streaming Analytics Backend is live & connected!');
 });
 
-// 2️⃣ Streaming analytics summary
-app.get('/api/analytics', async (req, res) => {
+// 2️⃣ Track stream (frontend sends seconds, provider, dataUsedMB, earnedNGN)
+app.post('/api/log-stream', async (req, res) => {
   try {
-    const streamData = await StreamLog.aggregate([
-      { $group: { _id: "$provider", totalSeconds: { $sum: "$seconds" }, count: { $sum: 1 } } }
-    ]);
+    const { videoId, seconds = 0, provider, dataUsedMB = 0, earnedNGN } = req.body;
+    if (!videoId || !provider) return res.status(400).json({ error: "Missing parameters" });
 
-    const response = {};
-    streamData.forEach(d => {
-      const dataMB = d.totalSeconds * 1.8;
-      const dataGB = dataMB / 1024;
-      const hours = d.totalSeconds / 3600;
-      response[d._id.toLowerCase()] = {
-        users: d.count,
-        hours: hours.toFixed(2),
-        data: dataGB.toFixed(2)
-      };
-    });
+    // Calculate earned if missing
+    const COST_PER_SECOND = 10; // ₦10 per second
+    const COST_PER_MB = 5;      // ₦5 per MB
+    const finalEarned = earnedNGN || (seconds * COST_PER_SECOND + dataUsedMB * COST_PER_MB);
 
-    res.json(response);
+    await StreamLog.create({ videoId, seconds, provider, dataUsedMB, earnedNGN: finalEarned });
+
+    // Update UsageModel for provider earnings
+    await UsageModel.findOneAndUpdate(
+      { provider },
+      { $inc: { earnings: finalEarned } },
+      { upsert: true, new: true }
+    );
+
+    res.json({ success: true, message: "Stream logged", earnedNGN: finalEarned });
   } catch (err) {
-    console.error("Analytics error:", err);
-    res.status(500).json({ error: "Failed to get analytics data" });
+    console.error("❌ Stream logging error:", err);
+    res.status(500).json({ error: "Failed to log stream" });
   }
 });
 
-// 3️⃣ Send verification email
+// 3️⃣ Track download
+app.post('/api/log-download', async (req, res) => {
+  try {
+    const { videoId, size = 0, ngn = 0, provider } = req.body;
+    if (!videoId) return res.status(400).json({ error: "Missing videoId" });
+
+    await DownloadLog.create({ videoId, size, ngn, provider });
+    res.json({ success: true, message: "Download logged" });
+  } catch (err) {
+    console.error("❌ Download logging error:", err);
+    res.status(500).json({ error: "Failed to log download" });
+  }
+});
+
+// 4️⃣ Log view analytics
+app.post('/api/log-view', async (req, res) => {
+  try {
+    const { videoId, userId, provider, event, dataUsedMB = 0, earnedNGN = 0 } = req.body;
+    if (!videoId || !provider) return res.status(400).json({ error: "Missing parameters" });
+
+    await View.create({ videoId, userId, provider, event, dataUsedMB, earnedNGN });
+    res.json({ success: true, message: "View logged" });
+  } catch (err) {
+    console.error("❌ View logging error:", err);
+    res.status(500).json({ error: "Failed to log view" });
+  }
+});
+
+// 5️⃣ Analytics summary for UI
+app.get('/api/analytics-summary', async (req, res) => {
+  try {
+    const totalStreams = await StreamLog.countDocuments();
+    const totalDownloads = await DownloadLog.countDocuments();
+    const totalVideos = await Video.countDocuments();
+    const totalViews = await View.countDocuments();
+
+    // Earnings per provider
+    const providerEarnings = await UsageModel.find();
+
+    const providerStats = {};
+    providerEarnings.forEach(p => {
+      providerStats[p.provider] = p.earnings;
+    });
+
+    res.json({
+      totalStreams,
+      totalDownloads,
+      totalVideos,
+      totalViews,
+      providerStats
+    });
+  } catch (err) {
+    console.error("❌ Analytics summary error:", err);
+    res.status(500).json({ error: "Failed to fetch analytics summary" });
+  }
+});
+
+// 6️⃣ Fetch all videos
+app.get('/api/videos', async (req, res) => {
+  try {
+    const videos = await Video.find().sort({ createdAt: -1 });
+    res.json(videos);
+  } catch (err) {
+    console.error("❌ Fetch videos error:", err);
+    res.status(500).json({ error: "Failed to fetch videos" });
+  }
+});
+
+// 7️⃣ Send verification email
 app.post("/api/send-verification-email", async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code) return res.status(400).json({ success: false, message: "Email and code required" });
 
   try {
-    verificationCodes[email] = { code, createdAt: Date.now() }; // store code with timestamp
+    verificationCodes[email] = { code, createdAt: Date.now() };
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -110,35 +187,31 @@ app.post("/api/send-verification-email", async (req, res) => {
       to: email,
       subject: "🔐 King Charmer Withdrawal Verification Code",
       html: `<div style="font-family: Poppins, sans-serif; background:#f9f9ff; padding:20px; border-radius:10px;">
-        <h2 style="color:#00b7ff;">King Charmer Network Verification</h2>
-        <p>Use the verification code below to confirm your withdrawal request:</p>
+        <h2 style="color:#00b7ff;">Verification Code</h2>
         <h1 style="letter-spacing:5px; background:#000; color:#00ffff; padding:10px 20px; border-radius:10px; display:inline-block;">
           ${code}
         </h1>
-        <p>This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
-        <p style="color:#666;">© 2025 King Charmer Network — Secure Analytics Division</p>
+        <p>Expires in 10 minutes.</p>
       </div>`,
     });
 
-    res.json({ success: true, message: "✅ Verification email sent successfully!" });
+    res.json({ success: true, message: "Verification email sent" });
   } catch (err) {
     console.error("❌ Verification email error:", err);
-    res.status(500).json({ success: false, message: "Failed to send verification email." });
+    res.status(500).json({ success: false, message: "Failed to send email." });
   }
 });
 
-// 4️⃣ Withdrawal email (only if code verified)
+// 8️⃣ Send withdrawal request email
 app.post("/api/send-withdraw-email", async (req, res) => {
   const { provider, accountNumber, accountName, bankName, amount, email, phone, companyEmail, currentBalance, code } = req.body;
 
-  // verify code
   const record = verificationCodes[email];
-  if (!record || record.code !== code || (Date.now() - record.createdAt) > 10 * 60 * 1000) {
-    return res.status(400).json({ success: false, message: "❌ Invalid or expired verification code." });
-  }
+  if (!record || record.code !== code || (Date.now() - record.createdAt) > 10 * 60 * 1000)
+    return res.status(400).json({ success: false, message: "Invalid or expired verification code." });
 
   const message = `
-💰 Withdrawal Request from King Charmer Platform
+💰 Withdrawal Request
 
 Provider: ${provider}
 Requested By: ${accountName}
@@ -146,10 +219,8 @@ Bank Name: ${bankName}
 Account Number: ${accountNumber}
 Phone: ${phone}
 Email: ${email}
-Amount to Withdraw: ₦${amount}
+Amount: ₦${amount}
 Current Balance: ₦${currentBalance}
-
-📊 This request came from the King Charmer Streaming analytics system.
 `;
 
   try {
@@ -161,44 +232,31 @@ Current Balance: ₦${currentBalance}
     await transporter.sendMail({
       from: `"King Charmer Analytics" <${process.env.EMAIL_USER}>`,
       to: companyEmail,
-      subject: `Withdrawal Request - ${provider} Network`,
+      subject: `Withdrawal Request - ${provider}`,
       text: message,
     });
 
-    delete verificationCodes[email]; // remove after successful use
-    res.json({ success: true, message: "✅ Withdrawal email sent successfully!" });
+    delete verificationCodes[email];
+    res.json({ success: true, message: "Withdrawal email sent successfully!" });
   } catch (err) {
-    console.error("❌ Email error:", err);
+    console.error("❌ Withdrawal email error:", err);
     res.status(500).json({ success: false, message: "Failed to send email." });
   }
 });
 
-// 5️⃣ Stream log route for all providers
-app.post("/api/log-stream", async (req, res) => {
-  const { videoId, seconds, provider } = req.body;
-  if (!videoId || !seconds || !provider) return res.status(400).json({ error: "Missing parameters" });
-
-  try {
-    await StreamLog.create({ videoId, seconds, provider });
-    res.json({ success: true, message: "Stream logged successfully!" });
-  } catch (err) {
-    console.error("❌ Stream logging error:", err);
-    res.status(500).json({ error: "Failed to log stream" });
-  }
-});
-
-// 6️⃣ Other existing routes (withdraw balance, summary)
+// 9️⃣ Provider balance route
 app.get("/api/withdraw/:provider", async (req, res) => {
   try {
     const { provider } = req.params;
     const usageData = await UsageModel.findOne({ provider });
     res.json({ provider, balance: usageData ? usageData.earnings : 0 });
   } catch (err) {
-    console.error("Balance fetch error:", err);
+    console.error("❌ Balance fetch error:", err);
     res.status(500).json({ error: "Failed to load provider balance." });
   }
 });
 
+// 10️⃣ Summary route
 app.get("/api/summary", async (req, res) => {
   try {
     const totalViews = await View.countDocuments();
