@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Withdraw Earnings - King Charmer Network</title>
+  <style>
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #101018, #050507);
+      color: #fff;
+      font-family: 'Poppins', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      color: #00e0ff;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .card {
+      background: #161622;
+      border-radius: 20px;
+      box-shadow: 0 0 20px #00ffff30;
+      padding: 25px;
+      width: 100%;
+      max-width: 420px;
+      box-sizing: border-box;
+    }
+
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-size: 0.9rem;
+      color: #bbb;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      outline: none;
+      background: #1f1f2f;
+      color: #fff;
+      font-size: 1rem;
+    }
+
+    input:focus {
+      box-shadow: 0 0 8px #00ffff80;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 20px;
+      padding: 12px;
+      border: none;
+      border-radius: 25px;
+      background: linear-gradient(90deg, #00e0ff, #00ffb7);
+      color: #000;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      transform: scale(1.03);
+      box-shadow: 0 0 15px #00ffff60;
+    }
+
+    .back {
+      margin-top: 15px;
+      text-align: center;
+      color: #00e0ff;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    .back:hover {
+      text-decoration: underline;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 25px;
+      color: #666;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="withdrawTitle">Withdraw Earnings</h1>
+  
+  <div class="card">
+    <label for="provider">Network Provider</label>
+    <input id="provider" type="text" placeholder="e.g. MTN" required readonly>
+
+    <label for="accountName">Account Name</label>
+    <input id="accountName" type="text" placeholder="John Doe" required>
+
+    <label for="accountNumber">Account Number</label>
+    <input id="accountNumber" type="text" placeholder="0123456789" required>
+
+    <label for="bankName">Bank Name</label>
+    <input id="bankName" type="text" placeholder="e.g. Access Bank" required>
+
+    <label for="email">Your Email</label>
+    <input id="email" type="email" placeholder="your@email.com" required>
+
+    <label for="phone">Phone Number</label>
+    <input id="phone" type="tel" placeholder="08012345678" required>
+
+    <label for="amount">Withdrawal Amount (₦)</label>
+    <input id="amount" type="number" placeholder="5000" required>
+
+    <label for="companyEmail">Company Email (Provider)</label>
+    <input id="companyEmail" type="email" placeholder="company@provider.com" required>
+
+    <label for="currentBalance">Current Balance (₦)</label>
+    <input id="currentBalance" type="number" placeholder="15000" required>
+
+    <button onclick="sendWithdrawal()">📩 Send Withdrawal Request</button>
+  </div>
+
+  <div class="back" onclick="window.location.href='ta.html'">⬅ Back to Dashboard</div>
+
+  <footer>© 2025 King Charmer Network | Secure Withdrawal System</footer>
+
+  <script>
+    // 🔗 Replace with your actual Render backend URL
+    const apiBase = "https://kingcharmer-backend.onrender.com";
+
+    // 🌐 Send withdrawal request
+    async function sendWithdrawal() {
+      const data = {
+        provider: document.getElementById("provider").value,
+        accountName: document.getElementById("accountName").value,
+        accountNumber: document.getElementById("accountNumber").value,
+        bankName: document.getElementById("bankName").value,
+        email: document.getElementById("email").value,
+        phone: document.getElementById("phone").value,
+        amount: document.getElementById("amount").value,
+        companyEmail: document.getElementById("companyEmail").value,
+        currentBalance: document.getElementById("currentBalance").value
+      };
+
+      // 🧠 Validation
+      if (Object.values(data).some(v => !v.trim())) {
+        alert("⚠️ Please fill in all fields before submitting.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${apiBase}/api/send-withdraw-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        });
+
+        const result = await res.json();
+        alert(result.message || "Withdrawal request sent successfully!");
+        window.location.href = "ta.html"; // ✅ Redirect after success
+      } catch (err) {
+        console.error("Error sending request:", err);
+        alert("❌ Something went wrong. Please try again later.");
+      }
+    }
+
+    // 🧩 Load provider from localStorage
+    const provider = localStorage.getItem("selectedProvider");
+    if (provider) {
+      document.title = `Withdraw Earnings - ${provider}`;
+      document.getElementById("provider").value = provider;
+      document.getElementById("withdrawTitle").textContent = `Withdraw Earnings - ${provider}`;
+    } else {
+      document.getElementById("withdrawTitle").textContent = "Withdraw Earnings";
+    }
+  </script>
+</body>
+</html>
