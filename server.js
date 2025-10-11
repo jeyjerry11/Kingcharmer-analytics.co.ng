@@ -151,3 +151,19 @@ app.get("/api/withdraw/:provider", async (req, res) => {
 //
 const PORT = process.env.PORT || 12000;
 app.listen(PORT, () => console.log(`🚀 King Charmer Analytics running on port ${PORT}`));
+// 📊 Summary route for global dashboard
+app.get("/api/summary", async (req, res) => {
+  try {
+    const totalViews = await View.countDocuments();
+    const totalStreams = await StreamLog.countDocuments();
+    const totalDownloads = await DownloadLog.countDocuments();
+
+    res.json({
+      views: totalViews,
+      streams: totalStreams,
+      downloads: totalDownloads
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch summary" });
+  }
+});
