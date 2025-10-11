@@ -75,7 +75,7 @@
 
     .stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 15px;
       margin-top: 15px;
     }
@@ -157,7 +157,8 @@
     <div class="stats">
       <div class="card"><h3>Total Users</h3><div class="value" id="airtel-users">--</div></div>
       <div class="card"><h3>Watch Hours</h3><div class="value" id="airtel-hours">--</div></div>
-      <div class="card"><h3>Data Used (GB)</h3><div class="value" id="airtel-data">--</div></div>
+      <div class="card"><h3>Data Used</h3><div class="value" id="airtel-data">--</div></div>
+      <div class="card"><h3>Total Downloads</h3><div class="value" id="airtel-downloads">--</div></div>
       <div class="card"><h3>Earnings (₦)</h3><div class="value" id="airtel-earn">--</div></div>
     </div>
   </div>
@@ -167,7 +168,8 @@
     <div class="stats">
       <div class="card"><h3>Total Users</h3><div class="value" id="mtn-users">--</div></div>
       <div class="card"><h3>Watch Hours</h3><div class="value" id="mtn-hours">--</div></div>
-      <div class="card"><h3>Data Used (GB)</h3><div class="value" id="mtn-data">--</div></div>
+      <div class="card"><h3>Data Used</h3><div class="value" id="mtn-data">--</div></div>
+      <div class="card"><h3>Total Downloads</h3><div class="value" id="mtn-downloads">--</div></div>
       <div class="card"><h3>Earnings (₦)</h3><div class="value" id="mtn-earn">--</div></div>
     </div>
   </div>
@@ -177,7 +179,8 @@
     <div class="stats">
       <div class="card"><h3>Total Users</h3><div class="value" id="glo-users">--</div></div>
       <div class="card"><h3>Watch Hours</h3><div class="value" id="glo-hours">--</div></div>
-      <div class="card"><h3>Data Used (GB)</h3><div class="value" id="glo-data">--</div></div>
+      <div class="card"><h3>Data Used</h3><div class="value" id="glo-data">--</div></div>
+      <div class="card"><h3>Total Downloads</h3><div class="value" id="glo-downloads">--</div></div>
       <div class="card"><h3>Earnings (₦)</h3><div class="value" id="glo-earn">--</div></div>
     </div>
   </div>
@@ -187,7 +190,8 @@
     <div class="stats">
       <div class="card"><h3>Total Users</h3><div class="value" id="mobile9-users">--</div></div>
       <div class="card"><h3>Watch Hours</h3><div class="value" id="mobile9-hours">--</div></div>
-      <div class="card"><h3>Data Used (GB)</h3><div class="value" id="mobile9-data">--</div></div>
+      <div class="card"><h3>Data Used</h3><div class="value" id="mobile9-data">--</div></div>
+      <div class="card"><h3>Total Downloads</h3><div class="value" id="mobile9-downloads">--</div></div>
       <div class="card"><h3>Earnings (₦)</h3><div class="value" id="mobile9-earn">--</div></div>
     </div>
   </div>
@@ -197,7 +201,8 @@
     <div class="stats">
       <div class="card"><h3>Total Users</h3><div class="value" id="spectra-users">--</div></div>
       <div class="card"><h3>Watch Hours</h3><div class="value" id="spectra-hours">--</div></div>
-      <div class="card"><h3>Data Used (GB)</h3><div class="value" id="spectra-data">--</div></div>
+      <div class="card"><h3>Data Used</h3><div class="value" id="spectra-data">--</div></div>
+      <div class="card"><h3>Total Downloads</h3><div class="value" id="spectra-downloads">--</div></div>
       <div class="card"><h3>Earnings (₦)</h3><div class="value" id="spectra-earn">--</div></div>
     </div>
   </div>
@@ -214,7 +219,6 @@
   <script>
     const apiBase = "https://kingcharmer-analytics-co-ng.onrender.com";
 
-    // 🔥 Fetch analytics summary for mini dashboard
     async function loadGlobalStats() {
       try {
         const res = await fetch(`${apiBase}/api/summary`);
@@ -223,13 +227,12 @@
         document.getElementById("total-views").textContent = data.views || 0;
         document.getElementById("total-streams").textContent = data.streams || 0;
         document.getElementById("total-downloads").textContent = data.downloads || 0;
-        document.getElementById("total-earnings").textContent = (data.downloads * 150).toFixed(2);
+        document.getElementById("total-earnings").textContent = (data.earnings || 0).toFixed(2);
       } catch (err) {
         console.error("❌ Summary fetch failed:", err);
       }
     }
 
-    // 📡 Fetch network analytics
     async function loadNetworkData() {
       try {
         const res = await fetch(`${apiBase}/api/analytics`);
@@ -244,14 +247,21 @@
         };
 
         for (let key in providers) {
-          document.getElementById(`${key}-users`).textContent = providers[key].users;
-          document.getElementById(`${key}-hours`).textContent = providers[key].hours;
-          document.getElementById(`${key}-data`).textContent = providers[key].data.toFixed(2);
-          document.getElementById(`${key}-earn`).textContent = (providers[key].data * 100).toFixed(2);
+          document.getElementById(`${key}-users`).textContent = providers[key].users || 0;
+          document.getElementById(`${key}-hours`).textContent = providers[key].hours || 0;
+          document.getElementById(`${key}-data`).textContent = formatData(providers[key].data || 0);
+          document.getElementById(`${key}-downloads`).textContent = providers[key].downloads || 0;
+          document.getElementById(`${key}-earn`).textContent = (providers[key].earnings || 0).toFixed(2);
         }
       } catch (err) {
         console.log("⚠️ Network data fetch failed:", err);
       }
+    }
+
+    function formatData(mb) {
+      if (mb >= 1e6) return (mb / 1e6).toFixed(2) + " TB";
+      if (mb >= 1e3) return (mb / 1e3).toFixed(2) + " GB";
+      return mb.toFixed(2) + " MB";
     }
 
     function goToWithdraw(provider) {
