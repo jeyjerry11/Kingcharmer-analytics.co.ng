@@ -174,3 +174,43 @@ app.get("/api/summary", async (req, res) => {
 //
 const PORT = process.env.PORT || 12000;
 app.listen(PORT, () => console.log(`🚀 King Charmer Analytics running on port ${PORT}`));
+// 6️⃣ Email Verification Route
+app.post("/api/send-verification-email", async (req, res) => {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return res.status(400).json({ success: false, message: "Email and code required" });
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"King Charmer Network" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "🔐 King Charmer Withdrawal Verification Code",
+      html: `
+        <div style="font-family: Poppins, sans-serif; background:#f9f9ff; padding:20px; border-radius:10px;">
+          <h2 style="color:#00b7ff;">King Charmer Network Verification</h2>
+          <p>Use the verification code below to confirm your withdrawal request:</p>
+          <h1 style="letter-spacing:5px; background:#000; color:#00ffff; padding:10px 20px; border-radius:10px; display:inline-block;">
+            ${code}
+          </h1>
+          <p>This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
+          <p style="color:#666;">© 2025 King Charmer Network — Secure Analytics Division</p>
+        </div>
+      `,
+    });
+
+    res.json({ success: true, message: "✅ Verification email sent successfully!" });
+  } catch (err) {
+    console.error("❌ Verification email error:", err);
+    res.status(500).json({ success: false, message: "Failed to send verification email." });
+  }
+});
