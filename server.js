@@ -6,14 +6,12 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
-app.use(cors({
-  origin: '*', // ✅ Allow all for now (you can later restrict to your domain)
-  methods: ['GET', 'POST']
-}));
+app.use(cors({ origin: '*', methods: ['GET', 'POST'] }));
 app.use(express.json());
 
 // ✅ MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://KingCharmerStreeming:Asdf0909@cluster0.il7ja6v.mongodb.net/kc_streaming?retryWrites=true&w=majority&appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI || 
+  'mongodb+srv://KingCharmerStreeming:Asdf0909@cluster0.il7ja6v.mongodb.net/kc_streaming?retryWrites=true&w=majority&appName=Cluster0';
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected to KC Streaming'))
@@ -40,16 +38,24 @@ const VideoSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// 🆕 Define Usage Model (to store provider-specific earnings)
 const UsageSchema = new mongoose.Schema({
   provider: String,
   earnings: Number
 });
 
+// Optional View schema (for total view count)
+const ViewSchema = new mongoose.Schema({
+  videoId: String,
+  userId: String,
+  timestamp: { type: Date, default: Date.now }
+});
+
+// 🧩 Models
 const StreamLog = mongoose.model('StreamLog', StreamSchema);
 const DownloadLog = mongoose.model('DownloadLog', DownloadSchema);
 const Video = mongoose.model('Video', VideoSchema);
 const UsageModel = mongoose.model('Usage', UsageSchema);
+const View = mongoose.model('View', ViewSchema);
 
 //
 // 🌐 ROUTES
@@ -69,16 +75,16 @@ app.get('/api/analytics', async (req, res) => {
 
     const totalSeconds = streamData[0]?.totalSeconds || 0;
     const dataMB = totalSeconds * 1.5; // 1.5 MB/sec rule
-    const dataGB = (dataMB / 1024).toFixed(2);
-    const hours = (totalSeconds / 3600).toFixed(2);
+    const dataGB = dataMB / 1024;
+    const hours = totalSeconds / 3600;
 
     // Simulated breakdown by provider
     const response = {
-      airtel: { users: 123, hours, data: (dataGB * 0.2).toFixed(2) },
-      mtn: { users: 214, hours, data: (dataGB * 0.3).toFixed(2) },
-      glo: { users: 88, hours, data: (dataGB * 0.25).toFixed(2) },
-      mobile9: { users: 61, hours, data: (dataGB * 0.15).toFixed(2) },
-      spectra: { users: 32, hours, data: (dataGB * 0.1).toFixed(2) }
+      airtel: { users: 123, hours: hours.toFixed(2), data: (dataGB * 0.2).toFixed(2) },
+      mtn: { users: 214, hours: hours.toFixed(2), data: (dataGB * 0.3).toFixed(2) },
+      glo: { users: 88, hours: hours.toFixed(2), data: (dataGB * 0.25).toFixed(2) },
+      mobile9: { users: 61, hours: hours.toFixed(2), data: (dataGB * 0.15).toFixed(2) },
+      spectra: { users: 32, hours: hours.toFixed(2), data: (dataGB * 0.1).toFixed(2) }
     };
 
     res.json(response);
@@ -130,7 +136,7 @@ Current Balance: ₦${currentBalance}
   }
 });
 
-// 4️⃣ Get provider-specific balance (based on Usage collection)
+// 4️⃣ Get provider-specific balance
 app.get("/api/withdraw/:provider", async (req, res) => {
   try {
     const { provider } = req.params;
@@ -146,12 +152,7 @@ app.get("/api/withdraw/:provider", async (req, res) => {
   }
 });
 
-//
-// 🚀 START SERVER
-//
-const PORT = process.env.PORT || 12000;
-app.listen(PORT, () => console.log(`🚀 King Charmer Analytics running on port ${PORT}`));
-// 📊 Summary route for global dashboard
+// 5️⃣ 📊 Summary route for global dashboard
 app.get("/api/summary", async (req, res) => {
   try {
     const totalViews = await View.countDocuments();
@@ -167,3 +168,9 @@ app.get("/api/summary", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch summary" });
   }
 });
+
+//
+// 🚀 START SERVER
+//
+const PORT = process.env.PORT || 12000;
+app.listen(PORT, () => console.log(`🚀 King Charmer Analytics running on port ${PORT}`));
