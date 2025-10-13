@@ -227,6 +227,7 @@
         document.getElementById("total-views").textContent = data.views || 0;
         document.getElementById("total-streams").textContent = data.streams || 0;
         document.getElementById("total-downloads").textContent = data.downloads || 0;
+        // If backend provides total earnings, use it. If not, set 0.
         document.getElementById("total-earnings").textContent = (data.earnings || 0).toFixed(2);
       } catch (err) {
         console.error("❌ Summary fetch failed:", err);
@@ -238,20 +239,21 @@
         const res = await fetch(`${apiBase}/api/analytics`);
         const data = await res.json();
 
+        // Expected structure: { airtel: {...}, mtn: {...}, glo: {...}, mobile9: {...}, spectra: {...} }
         const providers = {
-          airtel: data.airtel,
-          mtn: data.mtn,
-          glo: data.glo,
-          mobile9: data.mobile9,
-          spectra: data.spectra
+          airtel: data.airtel || {},
+          mtn: data.mtn || {},
+          glo: data.glo || {},
+          mobile9: data.mobile9 || {},
+          spectra: data.spectra || {}
         };
 
         for (let key in providers) {
-          document.getElementById(`${key}-users`).textContent = providers[key].users || 0;
-          document.getElementById(`${key}-hours`).textContent = providers[key].hours || 0;
-          document.getElementById(`${key}-data`).textContent = formatData(providers[key].data || 0);
+          document.getElementById(`${key}-users`).textContent     = providers[key].users || 0;
+          document.getElementById(`${key}-hours`).textContent     = providers[key].hours || 0;
+          document.getElementById(`${key}-data`).textContent      = formatData(providers[key].data || 0);
           document.getElementById(`${key}-downloads`).textContent = providers[key].downloads || 0;
-          document.getElementById(`${key}-earn`).textContent = (providers[key].earnings || 0).toFixed(2);
+          document.getElementById(`${key}-earn`).textContent      = (providers[key].earnings || 0).toFixed(2);
         }
       } catch (err) {
         console.log("⚠️ Network data fetch failed:", err);
@@ -269,8 +271,10 @@
       window.location.href = "withdraw.html";
     }
 
+    // Initial load
     loadGlobalStats();
     loadNetworkData();
+    // Reload every 10s
     setInterval(() => {
       loadGlobalStats();
       loadNetworkData();
