@@ -6,47 +6,39 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
-app.use(cors({ origin: '*', methods: ['GET', 'POST'] }));
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// ✅ MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI ||
-  'mongodb+srv://KingCharmerStreeming:Asdf0909@cluster0.il7ja6v.mongodb.net/kc_streaming?retryWrites=true&w=majority&appName=Cluster0';
-
+// MongoDB Connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/kc_streaming';
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB Connected to KC Streaming'))
+  .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Error:', err));
 
-// 🧠 Schemas
+// Schemas
 const StreamSchema = new mongoose.Schema({
   videoId: String,
+  sessionId: String, // Add session for better aggregation
+  userId: String,
   seconds: Number,
   provider: String,
   dataUsedMB: Number,
   earnedNGN: Number,
   timestamp: { type: Date, default: Date.now }
 });
-
 const DownloadSchema = new mongoose.Schema({
   videoId: String,
+  sessionId: String,
+  userId: String,
   size: Number,
   ngn: Number,
   provider: String,
   timestamp: { type: Date, default: Date.now }
 });
-
-const VideoSchema = new mongoose.Schema({
-  title: String,
-  url: String,
-  uploadSize: Number,
-  createdAt: { type: Date, default: Date.now }
-});
-
 const UsageSchema = new mongoose.Schema({
   provider: String,
   earnings: Number
 });
-
 const ViewSchema = new mongoose.Schema({
   videoId: String,
   userId: String,
@@ -56,38 +48,44 @@ const ViewSchema = new mongoose.Schema({
   earnedNGN: Number,
   timestamp: { type: Date, default: Date.now }
 });
+const VideoSchema = new mongoose.Schema({
+  title: String,
+  url: String,
+  uploadSize: Number,
+  createdAt: { type: Date, default: Date.now }
+});
 
-// 🧩 Models
+// Models
 const StreamLog = mongoose.model('StreamLog', StreamSchema);
 const DownloadLog = mongoose.model('DownloadLog', DownloadSchema);
-const Video = mongoose.model('Video', VideoSchema);
 const UsageModel = mongoose.model('Usage', UsageSchema);
 const View = mongoose.model('View', ViewSchema);
+const Video = mongoose.model('Video', VideoSchema);
 
-// 💾 In-memory verification code store
+// In-memory verification code store
 const verificationCodes = {};
 
-// 🌐 ROUTES
+// Routes
 
-// 1️⃣ Default route
+// Home route
 app.get('/', (req, res) => {
   res.send('📊 King Charmer Streaming Analytics Backend is live & connected!');
 });
 
-// 2️⃣ Track stream (frontend sends seconds, provider, dataUsedMB, earnedNGN)
+// Track stream: expects videoId, sessionId, userId, provider, seconds, dataUsedMB, earnedNGN
 app.post('/api/log-stream', async (req, res) => {
   try {
-    const { videoId, seconds = 0, provider, dataUsedMB = 0, earnedNGN } = req.body;
+    const { videoId, sessionId, userId, provider, seconds = 0, dataUsedMB = 0, earnedNGN } = req.body;
     if (!videoId || !provider) return res.status(400).json({ error: "Missing parameters" });
 
     // Calculate earned if missing
-    const COST_PER_SECOND = 10; // ₦10 per second
-    const COST_PER_MB = 5;      // ₦5 per MB
-    const finalEarned = earnedNGN || (seconds * COST_PER_SECOND + dataUsedMB * COST_PER_MB);
+    const COST_PER_SECOND = 1.8; // Adjust as needed
+    const COST_PER_MB = 1.8;     // Adjust as needed
+    const finalEarned = earnedNGN !== undefined ? earnedNGN : (seconds * COST_PER_SECOND + dataUsedMB * COST_PER_MB);
 
-    await StreamLog.create({ videoId, seconds, provider, dataUsedMB, earnedNGN: finalEarned });
+    await StreamLog.create({ videoId, sessionId, userId, seconds, provider, dataUsedMB, earnedNGN: finalEarned });
 
-    // Update UsageModel for provider earnings
+    // Update earnings per provider
     await UsageModel.findOneAndUpdate(
       { provider },
       { $inc: { earnings: finalEarned } },
@@ -101,13 +99,13 @@ app.post('/api/log-stream', async (req, res) => {
   }
 });
 
-// 3️⃣ Track download
+// Track download
 app.post('/api/log-download', async (req, res) => {
   try {
-    const { videoId, size = 0, ngn = 0, provider } = req.body;
+    const { videoId, sessionId, userId, size = 0, ngn = 0, provider } = req.body;
     if (!videoId) return res.status(400).json({ error: "Missing videoId" });
 
-    await DownloadLog.create({ videoId, size, ngn, provider });
+    await DownloadLog.create({ videoId, sessionId, userId, size, ngn, provider });
     res.json({ success: true, message: "Download logged" });
   } catch (err) {
     console.error("❌ Download logging error:", err);
@@ -115,7 +113,7 @@ app.post('/api/log-download', async (req, res) => {
   }
 });
 
-// 4️⃣ Log view analytics
+// Log view analytics
 app.post('/api/log-view', async (req, res) => {
   try {
     const { videoId, userId, provider, event, dataUsedMB = 0, earnedNGN = 0 } = req.body;
@@ -129,47 +127,74 @@ app.post('/api/log-view', async (req, res) => {
   }
 });
 
-// 5️⃣ Analytics summary for UI
-app.get('/api/analytics-summary', async (req, res) => {
+// Analytics summary for global stats
+app.get('/api/summary', async (req, res) => {
   try {
+    const totalViews = await View.countDocuments();
     const totalStreams = await StreamLog.countDocuments();
     const totalDownloads = await DownloadLog.countDocuments();
-    const totalVideos = await Video.countDocuments();
-    const totalViews = await View.countDocuments();
-
-    // Earnings per provider
-    const providerEarnings = await UsageModel.find();
-
-    const providerStats = {};
-    providerEarnings.forEach(p => {
-      providerStats[p.provider] = p.earnings;
-    });
-
+    // Calculate total earnings from Usage
+    const usage = await UsageModel.find();
+    const totalEarnings = usage.reduce((sum, u) => sum + (u.earnings || 0), 0);
     res.json({
-      totalStreams,
-      totalDownloads,
-      totalVideos,
-      totalViews,
-      providerStats
+      views: totalViews,
+      streams: totalStreams,
+      downloads: totalDownloads,
+      earnings: totalEarnings
     });
   } catch (err) {
-    console.error("❌ Analytics summary error:", err);
-    res.status(500).json({ error: "Failed to fetch analytics summary" });
+    res.status(500).json({ error: "Failed to fetch summary" });
   }
 });
 
-// 6️⃣ Fetch all videos
+// Per-provider analytics for dashboard
+app.get('/api/analytics', async (req, res) => {
+  try {
+    // Helper for each provider
+    async function providerStats(name) {
+      const users = await StreamLog.distinct("userId", { provider: name });
+      const logs = await StreamLog.find({ provider: name });
+      const downloads = await DownloadLog.find({ provider: name });
+
+      const watchSeconds = logs.reduce((sum, l) => sum + (l.seconds || 0), 0);
+      const dataUsed = logs.reduce((sum, l) => sum + (l.dataUsedMB || 0), 0);
+      const earnings = logs.reduce((sum, l) => sum + (l.earnedNGN || 0), 0) +
+                       downloads.reduce((sum, d) => sum + (d.ngn || 0), 0);
+
+      return {
+        users: users.length,
+        hours: (watchSeconds / 3600).toFixed(2),
+        data: dataUsed, // in MB
+        downloads: downloads.length,
+        earnings: earnings
+      };
+    }
+
+    const [airtel, mtn, glo, mobile9, spectra] = await Promise.all([
+      providerStats("Airtel"),
+      providerStats("MTN"),
+      providerStats("Glo"),
+      providerStats("9mobile"),
+      providerStats("Spectranet")
+    ]);
+
+    res.json({ airtel, mtn, glo, mobile9, spectra });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+});
+
+// Fetch all videos
 app.get('/api/videos', async (req, res) => {
   try {
     const videos = await Video.find().sort({ createdAt: -1 });
     res.json(videos);
   } catch (err) {
-    console.error("❌ Fetch videos error:", err);
     res.status(500).json({ error: "Failed to fetch videos" });
   }
 });
 
-// 7️⃣ Send verification email
+// Send verification email
 app.post("/api/send-verification-email", async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code) return res.status(400).json({ success: false, message: "Email and code required" });
@@ -197,12 +222,11 @@ app.post("/api/send-verification-email", async (req, res) => {
 
     res.json({ success: true, message: "Verification email sent" });
   } catch (err) {
-    console.error("❌ Verification email error:", err);
     res.status(500).json({ success: false, message: "Failed to send email." });
   }
 });
 
-// 8️⃣ Send withdrawal request email
+// Send withdrawal request email
 app.post("/api/send-withdraw-email", async (req, res) => {
   const { provider, accountNumber, accountName, bankName, amount, email, phone, companyEmail, currentBalance, code } = req.body;
 
@@ -239,35 +263,21 @@ Current Balance: ₦${currentBalance}
     delete verificationCodes[email];
     res.json({ success: true, message: "Withdrawal email sent successfully!" });
   } catch (err) {
-    console.error("❌ Withdrawal email error:", err);
     res.status(500).json({ success: false, message: "Failed to send email." });
   }
 });
 
-// 9️⃣ Provider balance route
+// Provider balance route
 app.get("/api/withdraw/:provider", async (req, res) => {
   try {
     const { provider } = req.params;
     const usageData = await UsageModel.findOne({ provider });
     res.json({ provider, balance: usageData ? usageData.earnings : 0 });
   } catch (err) {
-    console.error("❌ Balance fetch error:", err);
     res.status(500).json({ error: "Failed to load provider balance." });
   }
 });
 
-// 10️⃣ Summary route
-app.get("/api/summary", async (req, res) => {
-  try {
-    const totalViews = await View.countDocuments();
-    const totalStreams = await StreamLog.countDocuments();
-    const totalDownloads = await DownloadLog.countDocuments();
-    res.json({ views: totalViews, streams: totalStreams, downloads: totalDownloads });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch summary" });
-  }
-});
-
-// 🚀 START SERVER
+// Start server
 const PORT = process.env.PORT || 12000;
 app.listen(PORT, () => console.log(`🚀 King Charmer Analytics running on port ${PORT}`));
